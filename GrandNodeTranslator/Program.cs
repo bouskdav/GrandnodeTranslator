@@ -20,7 +20,7 @@ namespace GrandNodeTranslator
             var cookieContainer = new CookieContainer();
 
             XmlDocument document = new XmlDocument();
-            FileInfo xmlFile = new FileInfo(Path.Combine(@"C:\Users\david\Downloads", "language_pack.xml"));
+            FileInfo xmlFile = new FileInfo(Path.Combine(@"C:\Users\Anastazka\Downloads", "language_pack.xml"));
 
             using (StreamReader sr = new StreamReader(xmlFile.FullName, true))
             {
@@ -28,7 +28,7 @@ namespace GrandNodeTranslator
             }
 
             string fromLanguage = "en";
-            string toLanguage = "cs";
+            string toLanguage = "es";
 
             var languageNode = document.SelectSingleNode("//Language");
 
@@ -40,7 +40,7 @@ namespace GrandNodeTranslator
 
                 foreach (XmlNode item in languageNode.ChildNodes)
                 {
-                    string inputString = item.InnerText;
+                    string inputString = item.FirstChild.InnerText;
 
                     // fetch result
                     var result = await client.GetAsync($"m?hl={fromLanguage}&sl={fromLanguage}&tl={toLanguage}&ie=UTF-8&prev=_m&q={HttpUtility.UrlEncode(inputString)}");
@@ -56,15 +56,15 @@ namespace GrandNodeTranslator
 
                     var translationResult = pageDocument.DocumentNode.SelectSingleNode("(//div[contains(@class,'result-container')][1])")?.InnerText;
 
-                    item.InnerText = HttpUtility.UrlDecode(translationResult);
+                    item.FirstChild.InnerText = HttpUtility.UrlDecode(translationResult);
 
-                    Console.WriteLine($"Translated line: #{i} - {inputString} / {item.InnerText}");
+                    Console.WriteLine($"Translated line: #{i} - {inputString} / {item.FirstChild.InnerText}");
 
                     i++;
                 }
             }
 
-            using (StreamWriter sw = new StreamWriter(Path.Combine(@"C:\Users\david\Downloads", $"language_pack_{toLanguage}.xml"), false))
+            using (StreamWriter sw = new StreamWriter(Path.Combine(@"C:\Users\Anastazka\Downloads", $"language_pack_{toLanguage}.xml"), false))
             {
                 document.Save(sw);
             }
