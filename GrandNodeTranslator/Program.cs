@@ -2,11 +2,13 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Threading.Tasks;
 using System.Web;
 using System.Xml;
+using System.Xml.Linq;
 
 namespace GrandNodeTranslator
 {
@@ -16,9 +18,11 @@ namespace GrandNodeTranslator
         {
             Console.WriteLine("Grandnode translator!");
 
+            //var translationsRepoBase = new Uri("https://raw.githubusercontent.com/bouskdav/grandnode2_translations/main/");
             var baseAddress = new Uri("https://translate.google.com");
             var cookieContainer = new CookieContainer();
 
+            XDocument originalDocument = null;
             XmlDocument document = new XmlDocument();
             FileInfo xmlFile = new FileInfo(Path.Combine(@"C:\Users\Anastazka\Downloads", "language_pack.xml"));
 
@@ -28,8 +32,25 @@ namespace GrandNodeTranslator
             }
 
             string fromLanguage = "en";
-            string toLanguage = "es";
+            string toLanguage = "ru";
 
+            using (var handler = new HttpClientHandler())
+            using (var client = new HttpClient(handler))
+            {
+                string originalFileName = $"https://raw.githubusercontent.com/bouskdav/grandnode2_translations/main/language_pack_{toLanguage}.xml";
+
+                // fetch result
+                var result = await client.GetAsync(originalFileName);
+
+                if (result.IsSuccessStatusCode)
+                {
+                    string content = await result.Content.ReadAsStringAsync();
+
+                    originalDocument = XDocument.Parse(content);
+                }
+            }
+
+            var originalLanguageNode = originalDocument.Element("Language");
             var languageNode = document.SelectSingleNode("//Language");
 
             using (var handler = new HttpClientHandler() { CookieContainer = cookieContainer })
@@ -40,25 +61,39 @@ namespace GrandNodeTranslator
 
                 foreach (XmlNode item in languageNode.ChildNodes)
                 {
+                    string itemName = item.Attributes["Name"]?.Value;
                     string inputString = item.FirstChild.InnerText;
 
-                    // fetch result
-                    var result = await client.GetAsync($"m?hl={fromLanguage}&sl={fromLanguage}&tl={toLanguage}&ie=UTF-8&prev=_m&q={HttpUtility.UrlEncode(inputString)}");
+                    string originalValue = originalLanguageNode?
+                        .Descendants()
+                        .FirstOrDefault(i => i.Attribute("Name")?.Value == itemName)?.Value;
 
-                    // continue if not successful
-                    if (!result.IsSuccessStatusCode)
-                        throw new Exception("Chyba!");
+                    if (!String.IsNullOrEmpty(originalValue))
+                    {
+                        Console.WriteLine($"Skipping line {i} as already contains value.");
 
-                    string content = await result.Content.ReadAsStringAsync();
+                        item.FirstChild.InnerText = originalValue;
+                    }
+                    else
+                    {
+                        // fetch result
+                        var result = await client.GetAsync($"m?hl={fromLanguage}&sl={fromLanguage}&tl={toLanguage}&ie=UTF-8&prev=_m&q={HttpUtility.UrlEncode(inputString)}");
 
-                    HtmlDocument pageDocument = new HtmlDocument();
-                    pageDocument.LoadHtml(content);
+                        // continue if not successful
+                        if (!result.IsSuccessStatusCode)
+                            throw new Exception("Chyba!");
 
-                    var translationResult = pageDocument.DocumentNode.SelectSingleNode("(//div[contains(@class,'result-container')][1])")?.InnerText;
+                        string content = await result.Content.ReadAsStringAsync();
 
-                    item.FirstChild.InnerText = HttpUtility.UrlDecode(translationResult);
+                        HtmlDocument pageDocument = new HtmlDocument();
+                        pageDocument.LoadHtml(content);
 
-                    Console.WriteLine($"Translated line: #{i} - {inputString} / {item.FirstChild.InnerText}");
+                        var translationResult = pageDocument.DocumentNode.SelectSingleNode("(//div[contains(@class,'result-container')][1])")?.InnerText;
+
+                        item.FirstChild.InnerText = HttpUtility.UrlDecode(translationResult);
+
+                        Console.WriteLine($"Translated line: #{i} - {inputString} / {item.FirstChild.InnerText}");
+                    }
 
                     i++;
                 }
